@@ -18,6 +18,7 @@ class GroceryList extends StatefulWidget {
 class _GroceryListState extends State<GroceryList> {
   List<GroceryItem> _groceryItem = [];
   var isLoading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -30,25 +31,45 @@ class _GroceryListState extends State<GroceryList> {
       'shoppinglist-392cf-default-rtdb.firebaseio.com',
       'shopping_list.json',
     );
-    final response = await http.get(url);
-    final Map<String, dynamic> listData = json.decode(response.body);
-    final List<GroceryItem> listitems = [];
-    for (final items in listData.entries) {
-      final category = categories.entries
-          .firstWhere((catite) => catite.value.title == items.value['category'])
-          .value;
-      listitems.add(GroceryItem(
-        id: items.key,
-        name: items.value['name'],
-        category: category,
-        quantity: items.value['quantity'],
-      ));
+
+    try {
+      final response = await http.get(url);
+      if (response.statusCode >= 400) {
+        setState(() {
+          _error = 'Error! Failed to fetch data. Please try again later';
+        });
+      }
+      if (response.body == 'null') {
+        setState(() {
+          isLoading = false;
+        });
+        return;
+      }
+      final Map<String, dynamic> listData = json.decode(response.body);
+      final List<GroceryItem> listitems = [];
+      for (final items in listData.entries) {
+        final category = categories.entries
+            .firstWhere(
+                (catite) => catite.value.title == items.value['category'])
+            .value;
+        listitems.add(GroceryItem(
+          id: items.key,
+          name: items.value['name'],
+          category: category,
+          quantity: items.value['quantity'],
+        ));
+        setState(() {
+          _groceryItem = listitems;
+          isLoading = false;
+        });
+      }
+    } catch (error) {
       setState(() {
-        _groceryItem = listitems;
-        isLoading = false;
+        _error = 'Something went wrong. Please try again later';
       });
     }
   }
+  // throw Exception('An Error Occured');
 
   void _additem() async {
     final newItem = await Navigator.of(context).push<GroceryItem>(
@@ -64,10 +85,19 @@ class _GroceryListState extends State<GroceryList> {
     });
   }
 
-  void _removeditem(GroceryItem item) {
+  void _removeditem(GroceryItem item) async {
+    final indexof = _groceryItem.indexOf(item);
     setState(() {
       _groceryItem.remove(item);
     });
+    final url = Uri.https(
+      'shoppinglist-392cf-default-rtdb.firebaseio.com',
+      'shopping_list/${item.id}.json',
+    );
+    final response = await http.delete(url);
+    if (response.statusCode >= 400) {
+      _groceryItem.insert(indexof, item);
+    }
   }
 
   @override
@@ -100,6 +130,11 @@ class _GroceryListState extends State<GroceryList> {
             ),
           ),
         ),
+      );
+    }
+    if (_error != null) {
+      content = Center(
+        child: Text(_error!),
       );
     }
     return Scaffold(
