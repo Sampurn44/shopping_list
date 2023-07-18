@@ -1,8 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shopping_list/data/categories.dart';
 
 import 'package:shopping_list/data/dummy_items.dart';
 import 'package:shopping_list/models/grocery_items.dart';
 import 'package:shopping_list/widgets/new_item.dart';
+import 'package:http/http.dart' as http;
 
 class GroceryList extends StatefulWidget {
   const GroceryList({super.key});
@@ -12,7 +16,39 @@ class GroceryList extends StatefulWidget {
 }
 
 class _GroceryListState extends State<GroceryList> {
-  final List<GroceryItem> _groceryItem = [];
+  List<GroceryItem> _groceryItem = [];
+  var isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadata();
+  }
+
+  void _loadata() async {
+    final url = Uri.https(
+      'shoppinglist-392cf-default-rtdb.firebaseio.com',
+      'shopping_list.json',
+    );
+    final response = await http.get(url);
+    final Map<String, dynamic> listData = json.decode(response.body);
+    final List<GroceryItem> listitems = [];
+    for (final items in listData.entries) {
+      final category = categories.entries
+          .firstWhere((catite) => catite.value.title == items.value['category'])
+          .value;
+      listitems.add(GroceryItem(
+        id: items.key,
+        name: items.value['name'],
+        category: category,
+        quantity: items.value['quantity'],
+      ));
+      setState(() {
+        _groceryItem = listitems;
+        isLoading = false;
+      });
+    }
+  }
 
   void _additem() async {
     final newItem = await Navigator.of(context).push<GroceryItem>(
@@ -39,6 +75,11 @@ class _GroceryListState extends State<GroceryList> {
     Widget content = const Center(
       child: Text('No item Added!'),
     );
+    if (isLoading) {
+      content = const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
     if (_groceryItem.isNotEmpty) {
       content = ListView.builder(
         itemCount: _groceryItem.length,
